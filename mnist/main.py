@@ -7,20 +7,68 @@ from torchvision import datasets, transforms
 from torch.optim.lr_scheduler import StepLR
 
 
+# class Net(nn.Module):
+#     def __init__(self):
+#         super(Net, self).__init__()
+#         self.conv1 = nn.Conv2d(1, 32, 3, 1)
+#         self.conv2 = nn.Conv2d(32, 64, 3, 1)
+#         self.conv3 = nn.Conv2d(64, 128, 3, 1)
+#         self.dropout1 = nn.Dropout(0.25)
+#         self.dropout2 = nn.Dropout(0.5)
+#         self.fc1 = nn.Linear(61952, 128)
+#         self.fc2 = nn.Linear(128, 10)
+
+#     def forward(self, x):
+#         x = self.conv1(x)
+#         x = F.relu(x)
+#         x = self.conv2(x)
+#         x = F.relu(x)
+#         x = self.conv3(x)
+#         x = F.relu(x)
+#         x = F.max_pool2d(x, 2)
+#         x = self.dropout1(x)
+#         x = torch.flatten(x, 1)
+#         x = self.fc1(x)
+#         x = F.relu(x)
+#         x = self.dropout2(x)
+#         x = self.fc2(x)
+#         output = F.log_softmax(x, dim=1)
+#         return output
+
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
         self.conv1 = nn.Conv2d(1, 32, 3, 1)
         self.conv2 = nn.Conv2d(32, 64, 3, 1)
+        self.conv3 = nn.Conv2d(64, 128, 3, 1)
         self.dropout1 = nn.Dropout(0.25)
         self.dropout2 = nn.Dropout(0.5)
-        self.fc1 = nn.Linear(9216, 128)
+        
+        # Calculate the correct dimension automatically
+        self._to_linear = None
+        self._calculate_conv_output((1, 1, 28, 28))  # MNIST default size
+        
+        self.fc1 = nn.Linear(self._to_linear, 128)
         self.fc2 = nn.Linear(128, 10)
 
+    def _calculate_conv_output(self, shape):
+        with torch.no_grad():
+            x = torch.zeros(shape)
+            x = self.conv1(x)
+            x = F.relu(x)
+            x = self.conv2(x)
+            x = F.relu(x)
+            x = self.conv3(x)
+            x = F.relu(x)
+            x = F.max_pool2d(x, 2)
+            self._to_linear = x.shape[1] * x.shape[2] * x.shape[3]
+            
     def forward(self, x):
         x = self.conv1(x)
         x = F.relu(x)
         x = self.conv2(x)
+        x = F.relu(x)
+        x = self.conv3(x)
         x = F.relu(x)
         x = F.max_pool2d(x, 2)
         x = self.dropout1(x)
@@ -31,7 +79,6 @@ class Net(nn.Module):
         x = self.fc2(x)
         output = F.log_softmax(x, dim=1)
         return output
-
 
 def train(args, model, device, train_loader, optimizer, epoch):
     model.train()
@@ -94,23 +141,23 @@ def main():
                         help='For Saving the current Model')
     args = parser.parse_args()
 
-    use_accel = not args.no_accel and torch.accelerator.is_available()
+   # use_accel = not args.no_accel and torch.accelerator.is_available()
 
     torch.manual_seed(args.seed)
 
-    if use_accel:
-        device = torch.accelerator.current_accelerator()
-    else:
-        device = torch.device("cpu")
+   # if use_accel:
+   #     device = torch.accelerator.current_accelerator()
+   # else:
+    device = torch.device("cpu")
 
     train_kwargs = {'batch_size': args.batch_size}
     test_kwargs = {'batch_size': args.test_batch_size}
-    if use_accel:
-        accel_kwargs = {'num_workers': 1,
-                       'pin_memory': True,
-                       'shuffle': True}
-        train_kwargs.update(accel_kwargs)
-        test_kwargs.update(accel_kwargs)
+   # if use_accel:
+   #     accel_kwargs = {'num_workers': 1,
+   #                    'pin_memory': True,
+    #                   'shuffle': True}
+   #     train_kwargs.update(accel_kwargs)
+   #     test_kwargs.update(accel_kwargs)
 
     transform=transforms.Compose([
         transforms.ToTensor(),
