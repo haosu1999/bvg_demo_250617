@@ -8,7 +8,8 @@ from torch.optim.lr_scheduler import StepLR
 from clearml import Task
 from clearml import Logger
 
-#减少一层网络
+
+# 减少一层网络
 # class Net(nn.Module):
 #     def __init__(self):
 #         super(Net, self).__init__()
@@ -33,7 +34,7 @@ from clearml import Logger
 #         x = self.fc2(x)
 #         output = F.log_softmax(x, dim=1)
 #         return output
-    
+
 # 正常初始网络
 class Net(nn.Module):
     def __init__(self):
@@ -59,7 +60,9 @@ class Net(nn.Module):
         x = self.fc2(x)
         output = F.log_softmax(x, dim=1)
         return output
-#增加一层网络
+
+
+# 增加一层网络
 # class Net(nn.Module):
 #     def __init__(self):
 #         super(Net, self).__init__()
@@ -68,11 +71,11 @@ class Net(nn.Module):
 #         self.conv3 = nn.Conv2d(64, 128, 3, 1)
 #         self.dropout1 = nn.Dropout(0.25)
 #         self.dropout2 = nn.Dropout(0.5)
-        
+
 #         # Calculate the correct dimension automatically
 #         self._to_linear = None
 #         self._calculate_conv_output((1, 1, 28, 28))  # MNIST default size
-        
+
 #         self.fc1 = nn.Linear(self._to_linear, 128)
 #         self.fc2 = nn.Linear(128, 10)
 
@@ -87,7 +90,7 @@ class Net(nn.Module):
 #             x = F.relu(x)
 #             x = F.max_pool2d(x, 2)
 #             self._to_linear = x.shape[1] * x.shape[2] * x.shape[3]
-            
+
 #     def forward(self, x):
 #         x = self.conv1(x)
 #         x = F.relu(x)
@@ -104,13 +107,15 @@ class Net(nn.Module):
 #         x = self.fc2(x)
 #         output = F.log_softmax(x, dim=1)
 #         return output
-    
+
 class CustomClearML:
-  def __init__(self, project_name, task_name):
-    self.task = Task.init(project_name, task_name)
-    self.logger = self.task.get_logger()
-  def __call__(self, title, series, value, iteration):
-    self.logger.report_scalar(title, series, value, iteration)
+    def __init__(self, project_name, task_name):
+        self.task = Task.init(project_name, task_name)
+        self.logger = self.task.get_logger()
+
+    def __call__(self, title, series, value, iteration):
+        self.logger.report_scalar(title, series, value, iteration)
+
 
 def train(args, model, device, train_loader, optimizer, epoch):
     model.train()
@@ -125,10 +130,10 @@ def train(args, model, device, train_loader, optimizer, epoch):
         if batch_idx % args.log_interval == 0:
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch, batch_idx * len(data), len(train_loader.dataset),
-                100. * batch_idx / len(train_loader), loss.item()))
+                       100. * batch_idx / len(train_loader), loss.item()))
             clearml_logger("Test Loss", "Loss", loss.item(), epoch)
             if args.dry_run:
-                break 
+                break
 
 
 def test(model, device, test_loader):
@@ -142,17 +147,17 @@ def test(model, device, test_loader):
         for data, target in test_loader:
             data, target = data.to(device), target.to(device)
             output = model(data)
-            test_loss += F.nll_loss(output, target, reduction='sum').item()  # sum up batch loss
-            pred = output.argmax(dim=1, keepdim=True)  # get the index of the max log-probability
+            test_loss += F.nll_loss(output, target, reduction='sum').item()  #汇总批次损失
+            pred = output.argmax(dim=1, keepdim=True)  # 得到最大对数概率的指数
             correct += pred.eq(target.view_as(pred)).sum().item()
 
     test_loss /= len(test_loader.dataset)
     accuracy = 100. * correct / len(test_loader.dataset)
-    
+
     # 打印结果
     print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
         test_loss, correct, len(test_loader.dataset), accuracy))
-    
+
     # 记录到 ClearML
     logger.report_scalar(
         title="Test Accuracy",
@@ -160,8 +165,8 @@ def test(model, device, test_loader):
         value=accuracy,
         iteration=task.get_last_iteration()  # 使用当前迭代次数
     )
-    
-    return accuracy 
+
+    return accuracy
 
 
 def main():
@@ -185,37 +190,37 @@ def main():
                         help='random seed (default: 1)')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                         help='how many batches to wait before logging training status')
-    parser.add_argument('--save-model', action='store_true', 
+    parser.add_argument('--save-model', action='store_true',
                         help='For Saving the current Model')
     args = parser.parse_args()
 
-   # use_accel = not args.no_accel and torch.accelerator.is_available()
+    # use_accel = not args.no_accel and torch.accelerator.is_available()
 
     torch.manual_seed(args.seed)
 
-   # if use_accel:
-   #     device = torch.accelerator.current_accelerator()
-   # else:
+    # if use_accel:
+    #     device = torch.accelerator.current_accelerator()
+    # else:
     device = torch.device("cpu")
 
     train_kwargs = {'batch_size': args.batch_size}
     test_kwargs = {'batch_size': args.test_batch_size}
-   # if use_accel:
-   #     accel_kwargs = {'num_workers': 1,
-   #                    'pin_memory': True,
+    # if use_accel:
+    #     accel_kwargs = {'num_workers': 1,
+    #                    'pin_memory': True,
     #                   'shuffle': True}
-   #     train_kwargs.update(accel_kwargs)
-   #     test_kwargs.update(accel_kwargs)
+    #     train_kwargs.update(accel_kwargs)
+    #     test_kwargs.update(accel_kwargs)
 
-    transform=transforms.Compose([
+    transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize((0.1307,), (0.3081,))
-        ])
+    ])
     dataset1 = datasets.MNIST('../data', train=True, download=True,
-                       transform=transform)
+                              transform=transform)
     dataset2 = datasets.MNIST('../data', train=False,
-                       transform=transform)
-    train_loader = torch.utils.data.DataLoader(dataset1,**train_kwargs)
+                              transform=transform)
+    train_loader = torch.utils.data.DataLoader(dataset1, **train_kwargs)
     test_loader = torch.utils.data.DataLoader(dataset2, **test_kwargs)
 
     model = Net().to(device)
