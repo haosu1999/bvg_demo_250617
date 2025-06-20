@@ -5,8 +5,61 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
 from torch.optim.lr_scheduler import StepLR
+from clearml import Task
+from clearml import Logger
 
+#减少一层网络
+# class Net(nn.Module):
+#     def __init__(self):
+#         super(Net, self).__init__()
+#         self.conv1 = nn.Conv2d(1, 32, 3, 1)  # 保留第一个卷积层
+#         # 移除了第二个卷积层
+#         self.dropout1 = nn.Dropout(0.25)
+#         self.dropout2 = nn.Dropout(0.5)
+#         # 调整全连接层的输入维度，因为移除了第二个卷积层后特征图大小变化
+#         self.fc1 = nn.Linear(5408, 128)  # 原始是9216，现在是32通道*(28-2)/2=13 -> 32*13*13=5408
+#         self.fc2 = nn.Linear(128, 10)
 
+#     def forward(self, x):
+#         x = self.conv1(x)
+#         x = F.relu(x)
+#         # 移除了第二个卷积层及其对应的ReLU
+#         x = F.max_pool2d(x, 2)
+#         x = self.dropout1(x)
+#         x = torch.flatten(x, 1)
+#         x = self.fc1(x)
+#         x = F.relu(x)
+#         x = self.dropout2(x)
+#         x = self.fc2(x)
+#         output = F.log_softmax(x, dim=1)
+#         return output
+    
+# 正常初始网络
+class Net(nn.Module):
+    def __init__(self):
+        super(Net, self).__init__()
+        self.conv1 = nn.Conv2d(1, 32, 3, 1)
+        self.conv2 = nn.Conv2d(32, 64, 3, 1)
+        self.dropout1 = nn.Dropout(0.25)
+        self.dropout2 = nn.Dropout(0.5)
+        self.fc1 = nn.Linear(9216, 128)
+        self.fc2 = nn.Linear(128, 10)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = F.relu(x)
+        x = self.conv2(x)
+        x = F.relu(x)
+        x = F.max_pool2d(x, 2)
+        x = self.dropout1(x)
+        x = torch.flatten(x, 1)
+        x = self.fc1(x)
+        x = F.relu(x)
+        x = self.dropout2(x)
+        x = self.fc2(x)
+        output = F.log_softmax(x, dim=1)
+        return output
+#增加一层网络
 # class Net(nn.Module):
 #     def __init__(self):
 #         super(Net, self).__init__()
@@ -15,9 +68,26 @@ from torch.optim.lr_scheduler import StepLR
 #         self.conv3 = nn.Conv2d(64, 128, 3, 1)
 #         self.dropout1 = nn.Dropout(0.25)
 #         self.dropout2 = nn.Dropout(0.5)
-#         self.fc1 = nn.Linear(61952, 128)
+        
+#         # Calculate the correct dimension automatically
+#         self._to_linear = None
+#         self._calculate_conv_output((1, 1, 28, 28))  # MNIST default size
+        
+#         self.fc1 = nn.Linear(self._to_linear, 128)
 #         self.fc2 = nn.Linear(128, 10)
 
+#     def _calculate_conv_output(self, shape):
+#         with torch.no_grad():
+#             x = torch.zeros(shape)
+#             x = self.conv1(x)
+#             x = F.relu(x)
+#             x = self.conv2(x)
+#             x = F.relu(x)
+#             x = self.conv3(x)
+#             x = F.relu(x)
+#             x = F.max_pool2d(x, 2)
+#             self._to_linear = x.shape[1] * x.shape[2] * x.shape[3]
+            
 #     def forward(self, x):
 #         x = self.conv1(x)
 #         x = F.relu(x)
@@ -34,51 +104,13 @@ from torch.optim.lr_scheduler import StepLR
 #         x = self.fc2(x)
 #         output = F.log_softmax(x, dim=1)
 #         return output
-
-class Net(nn.Module):
-    def __init__(self):
-        super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(1, 32, 3, 1)
-        self.conv2 = nn.Conv2d(32, 64, 3, 1)
-        self.conv3 = nn.Conv2d(64, 128, 3, 1)
-        self.dropout1 = nn.Dropout(0.25)
-        self.dropout2 = nn.Dropout(0.5)
-        
-        # Calculate the correct dimension automatically
-        self._to_linear = None
-        self._calculate_conv_output((1, 1, 28, 28))  # MNIST default size
-        
-        self.fc1 = nn.Linear(self._to_linear, 128)
-        self.fc2 = nn.Linear(128, 10)
-
-    def _calculate_conv_output(self, shape):
-        with torch.no_grad():
-            x = torch.zeros(shape)
-            x = self.conv1(x)
-            x = F.relu(x)
-            x = self.conv2(x)
-            x = F.relu(x)
-            x = self.conv3(x)
-            x = F.relu(x)
-            x = F.max_pool2d(x, 2)
-            self._to_linear = x.shape[1] * x.shape[2] * x.shape[3]
-            
-    def forward(self, x):
-        x = self.conv1(x)
-        x = F.relu(x)
-        x = self.conv2(x)
-        x = F.relu(x)
-        x = self.conv3(x)
-        x = F.relu(x)
-        x = F.max_pool2d(x, 2)
-        x = self.dropout1(x)
-        x = torch.flatten(x, 1)
-        x = self.fc1(x)
-        x = F.relu(x)
-        x = self.dropout2(x)
-        x = self.fc2(x)
-        output = F.log_softmax(x, dim=1)
-        return output
+    
+class CustomClearML:
+  def __init__(self, project_name, task_name):
+    self.task = Task.init(project_name, task_name)
+    self.logger = self.task.get_logger()
+  def __call__(self, title, series, value, iteration):
+    self.logger.report_scalar(title, series, value, iteration)
 
 def train(args, model, device, train_loader, optimizer, epoch):
     model.train()
@@ -89,15 +121,20 @@ def train(args, model, device, train_loader, optimizer, epoch):
         loss = F.nll_loss(output, target)
         loss.backward()
         optimizer.step()
+        clearml_logger = CustomClearML("project_name", "task_name")
         if batch_idx % args.log_interval == 0:
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch, batch_idx * len(data), len(train_loader.dataset),
                 100. * batch_idx / len(train_loader), loss.item()))
+            clearml_logger("Test Loss", "Loss", loss.item(), epoch)
             if args.dry_run:
-                break
+                break 
 
 
 def test(model, device, test_loader):
+    # 初始化 ClearML Task
+    task = Task.current_task()
+    logger = task.get_logger()
     model.eval()
     test_loss = 0
     correct = 0
@@ -110,10 +147,21 @@ def test(model, device, test_loader):
             correct += pred.eq(target.view_as(pred)).sum().item()
 
     test_loss /= len(test_loader.dataset)
-
+    accuracy = 100. * correct / len(test_loader.dataset)
+    
+    # 打印结果
     print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
-        test_loss, correct, len(test_loader.dataset),
-        100. * correct / len(test_loader.dataset)))
+        test_loss, correct, len(test_loader.dataset), accuracy))
+    
+    # 记录到 ClearML
+    logger.report_scalar(
+        title="Test Accuracy",
+        series="Accuracy",
+        value=accuracy,
+        iteration=task.get_last_iteration()  # 使用当前迭代次数
+    )
+    
+    return accuracy 
 
 
 def main():
